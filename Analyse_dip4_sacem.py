@@ -49,7 +49,7 @@ def concatenate_final_csv(task, save_path):
                         
         
         df = pd.concat(df_lst, sort=False)
-        save_path = input('Choisissez un dossier pour sauvegarder le fichier concaténé.')
+        save_path = input('\nChoisissez un dossier pour sauvegarder le fichier concaténé.\n')
         if not save_path:
             return
         
@@ -78,35 +78,65 @@ def concatenate_final_csv(task, save_path):
 
 
 def contenu(x):
-    if type(x['Type de contenant']) == float:
-        if x['Type de contenant du parent'] == 'contenant de niveau 1':
+    type_de_contenant = x[0]
+    type_de_contenant_du_parent = x[1]
+
+    if (type(type_de_contenant) == float or type_de_contenant == 'nan') and (type_de_contenant_du_parent != 'nan' or type(type_de_contenant_du_parent) != float):
+        if type_de_contenant_du_parent == 'contenant de niveau 1':
             return 'contenu de niveau 1'
-        else:
+        elif type_de_contenant_du_parent == 'contenant de niveau 2':
             return 'contenu de niveau 2'
+    elif (type(type_de_contenant) == float or type_de_contenant == 'nan') and (type_de_contenant_du_parent == 'nan' or type(type_de_contenant_du_parent) == float):
+        return "----TROU----"
+    elif type(type_de_contenant) != float or type_de_contenant != 'nan':
+        return type_de_contenant
     else:
-        return x['Type de contenant']
+        return "----TROU----"
 
     
 def check_content(df):
     print("Check content will start")
     # Type de contenant
+    contenant_start = time.time()
     df['Numero d\'ordre'].loc[df['Numero d\'ordre'] == ''] = np.nan
     df['Lien'].loc[df['Lien'] == ''] = np.nan
     df = df.astype({'Numero d\'ordre': float, 'Lien': float})
-    df['contenant tmp'] = False
-    df['contenant tmp'].loc[(df['Numero d\'ordre'].isin(df['Lien'])) & (df['Fichier source'].isin(df['Fichier source']))] = True
+    # df['contenant tmp'] = False
+    # df['contenant tmp'].loc[(df['Numero d\'ordre'].isin(df['Lien'])) & (df['Fichier source'].isin(df['Fichier source']))] = True
+    parents = df.loc[(df['Fichier source'].isin(df['Fichier source'])) & (df['Lien'].isin(df['Numero d\'ordre']))].copy()
+    parents['contenant tmp'] = True
+    parents = parents[['Fichier source', 'Lien', 'contenant tmp']]
+    parents = parents.dropna()
+    df = df.merge(parents, left_on=['Fichier source', 'Numero d\'ordre'], right_on=['Fichier source', 'Lien'], how='left')
+
+
+    print("contenant tmp : OK")
+    df = df.rename({'Lien_x': 'Lien'},axis='columns')
+    df = df.drop('Lien_y', axis=1)
+
     df['Type de contenant'] = np.nan
-    df['Type de contenant'].loc[(df['contenant tmp'] == True) & (df['Lien'] != 0)] = "contenant de niveau 2"
+    df['Type de contenant'].loc[(df['contenant tmp'] == True) & (df['Lien'] != 0) & (df['Lien'].isnull() == False) & (df['Lien'] != '') & (df['Lien'] is not None)] = "contenant de niveau 2"
     df['Type de contenant'].loc[(df['contenant tmp'] == True) & (df['Lien'] == 0)] = "contenant de niveau 1"
     df['Type de contenant'].loc[(df['contenant tmp'] != True) & (df['Lien'] == 0)] = "contenant isole"
-    
+    print("Type de contenant : OK")
+    print("contenant time : ---- %s seconds ----" % (time.time() - contenant_start))
+
+
     # Type de contenu
-    parents = df.loc[(df['Fichier source'].isin(df['Fichier source'])) & (df['Numero d\'ordre'].isin(df['Lien']))]
+    content_start = time.time()
+    parent_merge_start = time.time()
+    parents = df.loc[(df['Fichier source'].isin(df['Fichier source'])) & (df['Numero d\'ordre'].isin(df['Lien']))].copy()
     parents = parents.drop(['Code Declarant', 'Date de debut de diffusion', 'Date de fin de diffusion', 'Heure de debut de diffusion', 'Heure de fin de diffusion', 'Type d\'enregistrement', 'Type de titre 1', 'Titre 1', 'Type de titre 2', 'Titre 2', 'Numero de l\'episode', 'Genre de diffusion de l\'oeuvre', 'code genre', 'Duree de diffusion', 'Doublage et/ou sous-titrage', 'Lien', 'Nombre de passage', 'contenant tmp'], axis=1)
     parents = parents.rename({'Type de contenant': 'Type de contenant du parent'},axis='columns')
     df = df.merge(parents, left_on=['Fichier source', 'Lien'], right_on=['Fichier source', 'Numero d\'ordre'], how='left')
+    print("parent merge time : ---- %s seconds ----" % (time.time() - parent_merge_start))
 
-    df['Type de contenant'] = df.apply(contenu, axis=1)
+    contenu_start = time.time()
+    df['item'] = [item for item in zip(df['Type de contenant'], df['Type de contenant du parent'])]
+    df['Type de contenant'] = df['item'].apply(contenu)
+    print("Contenu : OK")
+    print("contenu time : ---- %s seconds ----" % (time.time() - contenu_start))
+    print("content time : ---- %s seconds ----" % (time.time() - content_start))
     
     df = df.drop(['contenant tmp', 'Numero d\'ordre_y', 'Type de contenant du parent', 'Duree en secondes_y'], axis=1)
     df = df.rename({'Numero d\'ordre_x': 'Numero d\'ordre'})
@@ -206,13 +236,28 @@ def get_date(item):
     begin_date = item[2]
     end_date = item[3]
     titre = item[4]
+    end_date_before = item[6]
     
     if titre == "----TROU----":
-        return end_date
+        return end_date_before
     
     else:
         return begin_date
 
+
+def get_end_date(item):
+    
+    titre = item[4]
+    end_date_current = item[7]
+    begin_hour = item[0]
+    end_hour = item[1]
+    date_begin = item[6]
+    
+    if titre == "----TROU----":
+        return end_date(begin_hour, end_hour, date_begin)
+    
+    else:
+        return end_date_current
 
 # In[7]:
 
@@ -223,7 +268,7 @@ def get_holes(df):
     df['Trou'] = df['item'].apply(substract_broadcast_time)
     
     #Selectionne les trous et vides les celulles
-    holes = df[df['Trou'] != '00:00:00'].copy()
+    holes = df[(df['Trou'] != '00:00:00') & (df['code genre'] != 'PUB')].copy()
     other_cols = ["Numero d'ordre", "Heure de fin de diffusion", "Type d'enregistrement", "Type de titre 1", "Titre 1", "Type de titre 2", "Titre 2", "Numero de l'episode", "Genre de diffusion de l'oeuvre",  "Duree de diffusion", "Date de fin de diffusion", "Doublage et/ou sous-titrage", "Lien", "Nombre de passage"]
     holes[other_cols] = np.nan
     df['Trou'] = ''
@@ -249,10 +294,11 @@ def get_holes(df):
     
     df2["Heure de fin de diffusion"] = df2['item'].apply(get_hole_end_hour)
     
-    df2['item'] = [item for item in zip(df2['Heure de fin de diffusion'].shift(1), df2['Heure de debut de diffusion'].shift(-1), df2['Date de debut de diffusion'], df2['Date de debut de diffusion'].shift(-1), df2['Titre 1'], df2['Heure de debut de diffusion'])]
+    df2['item'] = [item for item in zip(df2['Heure de fin de diffusion'].shift(1), df2['Heure de debut de diffusion'].shift(-1), df2['Date de debut de diffusion'], df2['Date de debut de diffusion'].shift(-1), df2['Titre 1'], df2['Heure de debut de diffusion'], df2['Date de fin de diffusion'].shift(1), df2['Date de fin de diffusion'])]
     
     df2['Heure de debut de diffusion'] = df2['item'].apply(get_hole_begin_hour)
     df2['Date de debut de diffusion'] = df2['item'].apply(get_date)
+    df2['Date de fin de diffusion'] = df2['item'].apply(get_end_date)
     
      #trier les lignes du tableau pour replacer les trous entre les programmes
     df2 = df2.sort_values(["Code Declarant", "Date de debut de diffusion", 'Heure de debut de diffusion']).reset_index(drop = True)
