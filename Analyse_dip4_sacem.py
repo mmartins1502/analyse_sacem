@@ -28,6 +28,14 @@ def trou(x):
         return True
     return False
 
+
+def Type_de_contenant(x):
+    if str(x) == 'nan':
+        return "----TROU----"
+    else:
+        return x
+
+
 def concatenate_final_csv(task, save_path):
     if input('Souhaitez-vous concaténer les ' + task + ' ?\n') in ['Y', 'y', 'yes', 'Yes', 'oui', 'Oui', 'OUI', 'o', 'O', 'YES']:
            
@@ -57,12 +65,16 @@ def concatenate_final_csv(task, save_path):
 
         if task == 'oeuvres':
             df['TROU'] = df["Titre 1"].apply(trou)
+            df['Type de contenant'] = df['Type de contenant'].apply(Type_de_contenant)
 
             # Drop columns
-            cols = [c for c in df.columns if c.lower()[:13] != 'ayants_droit.']
+            df = df.drop('item', axis=1)
+            df = df.rename({'ayants_droit_x': 'ayants_droit', 'Duree en secondes_x': 'Duree en secondes'}, axis=1)
+            cols = [c for c in df.columns if (c.lower()[:13] != 'ayants_droit.') & (c.lower()[:13] != 'ayants_droit_')]
             df=df[cols]
             # Drop duplicates
-            df.drop_duplicates(keep=False, inplace=True)
+            # df = df.drop_duplicates(keep=False, inplace=True)
+            df = df.drop_duplicates()
 
 
             df.to_csv(os.path.join(save_path, "GRILLE_PROG.csv"), sep = ';', index = False)
@@ -86,13 +98,8 @@ def contenu(x):
             return 'contenu de niveau 1'
         elif type_de_contenant_du_parent == 'contenant de niveau 2':
             return 'contenu de niveau 2'
-    elif (type(type_de_contenant) == float or type_de_contenant == 'nan') and (type_de_contenant_du_parent == 'nan' or type(type_de_contenant_du_parent) == float):
-        return "----TROU----"
     elif type(type_de_contenant) != float or type_de_contenant != 'nan':
         return type_de_contenant
-    else:
-        return "----TROU----"
-
     
 def check_content(df):
     print("Check content will start")
@@ -268,7 +275,7 @@ def get_holes(df):
     df['Trou'] = df['item'].apply(substract_broadcast_time)
     
     #Selectionne les trous et vides les celulles
-    holes = df[(df['Trou'] != '00:00:00') & (df['code genre'] != 'PUB')].copy()
+    holes = df[(df['Trou'] != '00:00:00')].copy()
     other_cols = ["Numero d'ordre", "Heure de fin de diffusion", "Type d'enregistrement", "Type de titre 1", "Titre 1", "Type de titre 2", "Titre 2", "Numero de l'episode", "Genre de diffusion de l'oeuvre",  "Duree de diffusion", "Date de fin de diffusion", "Doublage et/ou sous-titrage", "Lien", "Nombre de passage"]
     holes[other_cols] = np.nan
     df['Trou'] = ''
@@ -287,6 +294,7 @@ def get_holes(df):
     
     #S'il la cellule de la colonne "Titre 1" est vide, ecrire "----TROU----" à l'interieur
     df2['Titre 1'] = ["----TROU----" if str(string) == "nan" else string for string in df2['Titre 1']]
+    # df2['Type de contenant'] = ["----TROU----" if str(string) == "nan" else string for string in df2['Type de contenant']]
     df2 = df2.sort_values(["Code Declarant", 'Date de debut de diffusion', 'Heure de debut de diffusion', "Trou"])
     
     #Ajouter les heures de debut et de fin des trous
@@ -303,8 +311,6 @@ def get_holes(df):
      #trier les lignes du tableau pour replacer les trous entre les programmes
     df2 = df2.sort_values(["Code Declarant", "Date de debut de diffusion", 'Heure de debut de diffusion']).reset_index(drop = True)
 
-
-    
 
     return df2
 
@@ -649,7 +655,7 @@ def get_oeuvres(line, dip4_dict):
         return dip4_dict
 
     dip4_dict["Doublage et/ou sous-titrage"] = line[197]
-    dip4_dict["Lien"] = line[217:223]
+    dip4_dict["Lien"] = line[217:223] if line[217:223].isdigit() else '000000'
     dip4_dict["Nombre de passage"] = line[225:229]
     dip4_dict["Heure de fin de diffusion"] = broadcast_end(dip4_dict['Heure de debut de diffusion'], dip4_dict["Duree de diffusion"])
     dip4_dict["Date de fin de diffusion"] = end_date(dip4_dict['Heure de debut de diffusion'], dip4_dict["Heure de fin de diffusion"], dip4_dict['Date de debut de diffusion'])
@@ -803,7 +809,6 @@ def create_tmp_files(file_path_list, tasks, oeuvres_cols, ayants_droit_cols):
         df_princ = df_princ.sort_values(['Code Declarant', 'Date de debut de diffusion', 'Heure de debut de diffusion'])
         df_princ['item'] = [item for item in zip(df_princ['Heure de fin de diffusion'], df_princ['Heure de debut de diffusion'].shift(-1), df_princ['Date de fin de diffusion'], df_princ['Date de debut de diffusion'].shift(-1))]
         df_princ['item'] = df_princ['item'].apply(get_datetime)
-        df_princ.head(10)
         df_princ = get_holes(df_princ)
         df_princ['Duree en secondes'] = df_princ['Duree de diffusion'].apply(str_to_td)
             
@@ -818,12 +823,11 @@ def create_tmp_files(file_path_list, tasks, oeuvres_cols, ayants_droit_cols):
         #Trier les colonnes du plus ancien vers le plus récent
         sort_oeuvres_cols = ["Date de debut de diffusion", 'Heure de debut de diffusion', "Type d'enregistrement", "Lien", 'Heure de fin de diffusion']
         df_oeuvres = pd.concat([df_princ, df_sec])
-#         oeuvres_cols.append('ayants_droit')
+        oeuvres_cols.append('ayants_droit')
 #         oeuvres_cols.append('Type de contenant')
         df_oeuvres['Type de contenant'] = np.nan
         del df_princ, df_sec
         df_oeuvres = df_oeuvres.sort_values(sort_oeuvres_cols).reset_index(drop = True)[oeuvres_cols]
-
         global last_contenant
         last_contenant = 1
         
@@ -1111,9 +1115,9 @@ def check_dip4(lines, code, chaine, nom, chemin):
                 duree_count += 1
                 dic["Duree de diffusion"] = anomalie_nombre("La ", 'duree', line[177:183])                + get_percent(duree_count, lenght)
                   
-            if not line[217:223].isdigit():
-                lien_count += 1
-                dic["Lien"] = anomalie_nombre("Le ", 'lien', line[217:223])                + get_percent(lien_count, lenght)
+            # if not line[217:223].isdigit():
+            #     lien_count += 1
+            #     dic["Lien"] = anomalie_nombre("Le ", 'lien', line[217:223])                + get_percent(lien_count, lenght)
                           
             if not line[225:229].isdigit():
                 passage_count += 1
