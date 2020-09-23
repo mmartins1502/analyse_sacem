@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# ### NOTE:
-#    #### Optimiser le code pour ajouter les ayants droit
-
 # In[1]:
 
 
@@ -72,8 +69,6 @@ def concatenate_final_csv(task, save_path):
             df = df.rename({'ayants_droit_x': 'ayants_droit', 'Duree en secondes_x': 'Duree en secondes'}, axis=1)
             cols = [c for c in df.columns if (c.lower()[:13] != 'ayants_droit.') & (c.lower()[:13] != 'ayants_droit_')]
             df=df[cols]
-            # Drop duplicates
-            # df = df.drop_duplicates(keep=False, inplace=True)
             df = df.drop_duplicates()
 
 
@@ -108,8 +103,6 @@ def check_content(df):
     df['Numero d\'ordre'].loc[df['Numero d\'ordre'] == ''] = np.nan
     df['Lien'].loc[df['Lien'] == ''] = np.nan
     df = df.astype({'Numero d\'ordre': float, 'Lien': float})
-    # df['contenant tmp'] = False
-    # df['contenant tmp'].loc[(df['Numero d\'ordre'].isin(df['Lien'])) & (df['Fichier source'].isin(df['Fichier source']))] = True
     parents = df.loc[(df['Fichier source'].isin(df['Fichier source'])) & (df['Lien'].isin(df['Numero d\'ordre']))].copy()
     parents['contenant tmp'] = True
     parents = parents[['Fichier source', 'Lien', 'contenant tmp']]
@@ -294,7 +287,6 @@ def get_holes(df):
     
     #S'il la cellule de la colonne "Titre 1" est vide, ecrire "----TROU----" à l'interieur
     df2['Titre 1'] = ["----TROU----" if str(string) == "nan" else string for string in df2['Titre 1']]
-    # df2['Type de contenant'] = ["----TROU----" if str(string) == "nan" else string for string in df2['Type de contenant']]
     df2 = df2.sort_values(["Code Declarant", 'Date de debut de diffusion', 'Heure de debut de diffusion', "Trou"])
     
     #Ajouter les heures de debut et de fin des trous
@@ -743,37 +735,6 @@ def file_to_dataframe(file_path, tasks):
         df_sec = df_oeuvres[df_oeuvres["Type d'enregistrement"] == '10'][df_oeuvres['Lien'] != '000000'].reset_index(drop = True).copy()
     else:
         df_princ = df_sec = None
-
-#     ###########################################################################################
-#     #                                           optimiser le code
-    
-#     # Checking if we have an 'ayant droit' for each 'oeuvre' when 'Lien' == 0
-#     AD = False
-#     AD_list = []
-#     ayant_list = list(df_ayants["Numero d'ordre"])
-#     for no in df_princ["Numero d'ordre"]:
-#         if no in ayant_list:
-#             AD_list.append(True)
-#         else:
-#             AD_list.append(False)
-#     df_princ['ayants_droit'] = AD_list
-    
-#     # Checking if we have an 'ayant droit' for each 'oeuvre' when 'Lien' != 0
-#     AD = False
-#     AD_list = []
-#     ayant_list = list(df_ayants["Numero d'ordre"])
-#     for no in df_sec["Numero d'ordre"]:
-#         if no in ayant_list:
-#             AD_list.append(True)
-#         else:
-#             AD_list.append(False)
-#     df_sec['ayants_droit'] = AD_list
-
-#     df_princ['ayants_droit'] = False
-#     df_princ['ayants_droit'].loc[(df_princ["Numero d'ordre"].isin(df_ayants["Numero d'ordre"]))] = True
-#     df_sec['ayants_droit'] = False
-#     df_sec['ayants_droit'].loc[(df_sec["Numero d'ordre"].isin(df_ayants["Numero d'ordre"]))] = True
-
 
 
     del dip4_list 
@@ -1271,19 +1232,6 @@ def main():
 
 
 main()
-
-
-# In[ ]:
-
-
-#Users(/maximemartins/Desktop/testLight/liste_dip4.csv)
-
-#Users(/maximemartins/Desktop/test, PUB/liste_dip4.csv)
-
-#Users(/maximemartins/Desktop/test/liste_dip4.csv)
-
-
-# In[ ]:
 
 
 
